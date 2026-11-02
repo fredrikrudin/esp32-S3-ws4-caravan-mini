@@ -381,6 +381,7 @@ const char *vic_status(const VicData &d, uint8_t type, uint32_t now);
 /* ble.cpp */
 void ble_start();
 void ble_scan_service();          // call from loop()
+#define WIFI_COUNTRY "SE"  // WiFi channels 1-13 (any EU code gives the same channels)
 #define BATT_SCAN_S 300  // on the LiPo: one Bluetooth scan every 5 minutes
 void ble_pause_scan(bool pause);  // stop scanning (while WiFi joins, before deep sleep)
 

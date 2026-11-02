@@ -2,6 +2,7 @@
 /* Network task (core 0, never touches LVGL): WiFi, NTP, Open-Meteo weather.
    It also does all flash writes the UI asks for, so they happen in one place. */
 #include "app.h"
+#include <esp_wifi.h>  // esp_wifi_set_country_code
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -30,6 +31,19 @@ static int http_get(const String &url, String &body) {
 static void do_scan() {
   set_wifi_status(TR("Scanning..."));
   int n = WiFi.scanNetworks();
+  {  // what was heard, with channel and signal, for /log (helps when a network is missing)
+    char line[400];
+    int hidden = 0, len = snprintf(line, sizeof(line), "WiFi scan: %d network(s):", n < 0 ? 0 : n);
+    for (int i = 0; i < n && len < (int)sizeof(line) - 40; i++) {
+      if (WiFi.SSID(i).length() == 0) {
+        hidden++;
+        continue;
+      }
+      len += snprintf(line + len, sizeof(line) - len, " %.20s (ch %d, %d dBm)", WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
+    }
+    if (hidden && len < (int)sizeof(line) - 20) snprintf(line + len, sizeof(line) - len, ", %d hidden", hidden);
+    logf("%s", line);
+  }
 
   char saved[33];
   LOCK();
@@ -349,6 +363,11 @@ static void net_task(void *arg) {
   WiFi.persistent(false);  // we store credentials ourselves; avoid extra flash writes
   WiFi.onEvent(wifi_event);
   WiFi.mode(WIFI_STA);
+  /* Channels 1-13 as in Sweden and the rest of Europe. Without this the board is in
+     "world safe" mode and searches only channels 1-11 properly, so a router on
+     channel 12 or 13 is never found. With 802.11d on, a router abroad that announces
+     its own country is followed while connected. */
+  if (esp_wifi_set_country_code(WIFI_COUNTRY, true) != ESP_OK) logf("WiFi: country %s not accepted", WIFI_COUNTRY);
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(true);  // modem sleep: required while Bluetooth shares the radio (BOARD_NOTES.md)
   wifi_inited = true;  // setup() waits for this before starting Bluetooth

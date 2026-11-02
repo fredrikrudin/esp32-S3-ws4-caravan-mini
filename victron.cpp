@@ -56,7 +56,9 @@ const char *vic_state_name(uint8_t s) {
     case 5: return N_("Float");
     case 6: return N_("Storage");
     case 7: return N_("Equalize");
+    case 8: return N_("Passthru");
     case 9: return N_("Inverting");
+    case 10: return N_("Assisting");
     case 11: return N_("Power supply");
     case 245: return N_("Starting up");
     case 246: return N_("Rep. absorption");
@@ -86,8 +88,8 @@ const char *vic_alarm_text(uint16_t a) {
 }
 
 bool vic_fresh(const VicData &d, uint32_t now) {
-  /* on battery the radios are off, so the last readings are all there is:
-     keep showing them rather than letting everything go stale */
+  /* on battery Bluetooth scans only every 5 minutes: keep showing the last
+     readings rather than letting everything go stale in between */
   if (power_on_battery()) return d.last_seen != 0;
   return d.last_seen && now - d.last_seen < sensor_stale_ms(VIC_STALE_MS);
 }
@@ -192,6 +194,21 @@ static void vic_decode(uint8_t type, BitReader &br, VicData &v) {
   }
 }
 
+/* Does a decoded record look like real data? The advertisement carries only the
+   key's first byte, so a key that is right there but mistyped further on passes
+   that check and decrypts to random numbers (an AC charger at 60 V and 120 A, a
+   state nobody knows). Such records are not shown. */
+static bool vic_plausible(uint8_t type, const VicData &v) {
+  if (type == VIC_SOLAR || type == VIC_DCDC || type == VIC_ACCHG || type == VIC_INVERTER) {
+    if (!strcmp(vic_state_name(v.state), "Unknown")) return false;
+  }
+  if (!isnan(v.batt_v) && (v.batt_v < 0 || v.batt_v > 70)) return false;
+  if (type == VIC_BATTMON && !isnan(v.soc) && v.soc > 100) return false;
+  if (type == VIC_DCDC && ((!isnan(v.in_v) && v.in_v > 70) || (!isnan(v.out_v) && (v.out_v < 0 || v.out_v > 70)))) return false;
+  if (type == VIC_SOLAR && !isnan(v.pv_w) && v.pv_w > 20000) return false;
+  return true;
+}
+
 void vic_handle(const std::string &md, const char *addr, int rssi) {
   const uint8_t *d = (const uint8_t *)md.data();
   size_t n = md.size();
@@ -261,7 +278,24 @@ void vic_handle(const std::string &md, const char *addr, int rssi) {
     vic_decrypt(key, iv, p + 8, plen, plain);
     BitReader br = { plain, plen, 0 };
     vic_decode(type, br, v);
-    v.key_ok = true;
+    /* three nonsense records in a row: almost certainly a mistyped key */
+    static uint8_t odd[MAX_VIC];
+    if (vic_plausible(type, v)) {
+      odd[idx] = 0;
+      v.key_ok = true;
+    } else if (odd[idx] < 3 && ++odd[idx] < 3) {
+      return;  // keep the previous reading for now
+    } else {
+      if (odd[idx] == 3) {
+        odd[idx] = 4;  // say it once
+        log_fault("Victron: %s gives nonsense values - check its encryption key", mac);
+      }
+      vic_clear_data(v);
+      v.type = type;
+      v.rssi = rssi;
+      v.last_seen = now;
+      v.key_bad = true;  // shown as "Wrong key"
+    }
   }
 
   xSemaphoreTake(vic_mtx, portMAX_DELAY);

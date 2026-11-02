@@ -303,7 +303,9 @@ static const TrPair tr_sv[] = {
   { "Float", "Float" },
   { "Storage", "Förvaring" },
   { "Equalize", "Utjämning" },
+  { "Passthru", "Genomkoppling" },
   { "Inverting", "Växelriktar" },
+  { "Assisting", "Assisterar" },
   { "Power supply", "Strömförsörjning" },
   { "Starting up", "Startar" },
   { "Rep. absorption", "Upprepad absorption" },
@@ -372,6 +374,6 @@ static const TrPair tr_sv[] = {
 };
 
 static const BuiltIn builtin[] = {
-  { "sv", "Svenska", tr_sv, 366 },
+  { "sv", "Svenska", tr_sv, 368 },
 };
 static const int BUILTIN_COUNT = 1;

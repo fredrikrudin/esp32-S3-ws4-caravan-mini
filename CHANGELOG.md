@@ -41,6 +41,16 @@ being sorted out there. Focus: stability, Victron, RuuviTags and the web page.
 - **Start page bottom bar: only the RuuviTags**, three columns with the temperature over the
   name. The outside temperature moved up beside the weather symbol;
   with no tags added the bar is hidden.
+- **A mistyped Victron key now shows as "Wrong key"** instead of nonsense values. The
+  advertisement only carries the key's first byte, so a key right at the start but wrong
+  further on decrypted to random numbers (an AC charger showing 7324 W at 60 V and 120 A,
+  state Unknown). Three nonsense records in a row now mark the device "Wrong key", and the
+  log says to check its encryption key.
+- **WiFi finds routers on channel 12 and 13.** The board was in WiFi's "world safe"
+  mode, which searches channels 1-11 properly, so a network on 12 or 13 (allowed in
+  Sweden and the rest of Europe) never showed up. The country is now set to Sweden
+  (`WIFI_COUNTRY` in `app.h`), giving channels 1-13.
+  A WiFi scan now logs each network with its channel and signal, and how many are hidden.
 - **Power tab: a History button** top right, opening the same history screen as tapping a
   tile (solar and consumption per hour or per day).
 - Tested with NimBLE-Arduino 2.5.2 (fixes for connections and remote reads); the README
