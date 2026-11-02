@@ -69,7 +69,7 @@ Each page is a column of cards.
 
 | Page | Cards |
 |---|---|
-| **Connect** | **WiFi** (scan, password, status) &middot; **Web page** (run the server, name, password) &middot; **Weather location** |
+| **Connect** | **WiFi** (scan, password, status, up to 5 remembered networks, Forget) &middot; **Web page** (run the server, name, password) &middot; **Weather location** |
 | **Sensors** | **Temperature** (up to 3 RuuviTags) &middot; **Victron devices** (add, name, encryption key, live status) &middot; **Sensor scan interval** (and Scan now) |
 | **Device** | **Language** (English, Svenska) &middot; **Power** (onboard LiPo, battery mode and its shutdown threshold) &middot; **Display** (brightness, screen saver brightness) &middot; **Alarms** (thresholds, wake the screen, SD warning) &middot; **SD card** (mount, eject, probe, logs, CSV, backup) &middot; **Debug** (serial monitor, performance log) &middot; **About** &middot; **System** (restart, shut down, full reset) |
 
@@ -129,7 +129,10 @@ Every change gets an entry in [CHANGELOG.md](CHANGELOG.md).
 1. Install the libraries and set the Arduino IDE options listed below.
 2. Open `esp32-s3-ws4-caravan-mini.ino` and upload.
 3. On the board, open **⚙ Settings**:
-   - **WiFi:** tap Scan, pick your network, enter the password, tap Connect.
+   - **WiFi:** tap Scan, pick your network, enter the password, tap Connect. Each network that connects is
+     remembered (up to 5, for example home and the caravan): the board joins whichever is in range,
+     the strongest if several are, and looks again a minute after losing the connection. Picking a
+     remembered network fills in its password; **Forget** removes the one chosen in the list.
    - **Weather location:** type a city (or `City, Country`) and tap Set.
    - **RuuviTags:** pick a tag from the list, tap Add and give it a name. Up to 3 tags; tap one in the list to rename or delete it.
    - **Victron devices:** pick a device, tap Add, then enter a name and its 32-character encryption key.

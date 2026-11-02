@@ -130,11 +130,16 @@ void net_poll_cb(lv_timer_t *t) {
     lv_label_set_text(lbl_wifi_status, g.wifi_status);
     g.status_changed = false;
   }
+  bool picked = false;
   if (g.scan_ready) {
     lv_dropdown_set_options(dd_ssid, g.scan_list);
     lv_dropdown_set_selected(dd_ssid, g.scan_sel);
     g.scan_ready = false;
+    picked = true;
   }
+  static int wifis_shown = -1;
+  bool wifis_changed = wifis_shown != g.wifis_ver;
+  if (wifis_changed) wifis_shown = g.wifis_ver;
   if (g.loc_changed) {
     lv_label_set_text(lbl_loc, g.loc_status);
     lv_label_set_text(lbl_place, g.has_loc ? g.place : "No location set");
@@ -148,6 +153,8 @@ void net_poll_cb(lv_timer_t *t) {
   }
   xSemaphoreGive(g_mtx);
   if (wx) show_weather(w);
+  if (picked) wifi_ui_selected();  // a remembered network fills in its password
+  if (wifis_changed) wifi_ui_refresh();  // a network was remembered or forgotten
 }
 
 /* ---------- weather symbols (start page) ----------

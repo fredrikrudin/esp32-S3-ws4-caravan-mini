@@ -19,6 +19,7 @@ volatile bool cmd_save_ruuvi = false, cmd_save_vic = false, cmd_save_scan = fals
 volatile bool cmd_save_lang = false;
 volatile bool cmd_save_rhist = false;
 volatile bool cmd_save_bl = false, cmd_save_web = false, cmd_save_feat = false, cmd_save_alarm = false, cmd_save_splash = false;
+volatile bool cmd_save_wifis = false;
 volatile bool scan_restart = false;
 
 volatile bool feat_ruuvi = true;
@@ -48,6 +49,13 @@ void load_cfg() {
   lang_begin();  // before anything below builds text
   prefs.getString("ssid", g.ssid, sizeof(g.ssid));
   prefs.getString("pass", g.pass, sizeof(g.pass));
+  /* the remembered networks; a board that has only "ssid"/"pass" starts with that one */
+  if (prefs.getBytesLength("wifis") == sizeof(g.wifis)) prefs.getBytes("wifis", g.wifis, sizeof(g.wifis));
+  else if (g.ssid[0]) wifi_remember(g.ssid, g.pass);
+  for (auto &w : g.wifis) {  // never trust what flash gives back to be terminated
+    w.ssid[sizeof(w.ssid) - 1] = 0;
+    w.pass[sizeof(w.pass) - 1] = 0;
+  }
   prefs.getString("city", g.city, sizeof(g.city));
   prefs.getString("place", g.place, sizeof(g.place));
   prefs.getString("webpass", g.web_pass, sizeof(g.web_pass));
@@ -183,4 +191,45 @@ String url_encode(const char *s) {
     }
   }
   return o;
+}
+
+/* ---------- remembered WiFi networks ---------- */
+void wifi_remember(const char *ssid, const char *pass) {
+  if (!ssid[0]) return;
+  WifiCred w = {};
+  strlcpy(w.ssid, ssid, sizeof(w.ssid));
+  strlcpy(w.pass, pass, sizeof(w.pass));
+  int at = MAX_WIFI - 1;  // a new one pushes the oldest out
+  for (int i = 0; i < MAX_WIFI; i++)
+    if (!strcmp(g.wifis[i].ssid, ssid)) at = i;
+  if (at == 0 && !strcmp(g.wifis[0].pass, pass)) return;  // already first, nothing changed
+  memmove(&g.wifis[1], &g.wifis[0], at * sizeof(WifiCred));
+  g.wifis[0] = w;
+  g.wifis_ver++;
+  cmd_save_wifis = true;
+}
+
+bool wifi_forget(const char *ssid) {
+  for (int i = 0; i < MAX_WIFI; i++) {
+    if (!g.wifis[i].ssid[0] || strcmp(g.wifis[i].ssid, ssid)) continue;
+    memmove(&g.wifis[i], &g.wifis[i + 1], (MAX_WIFI - 1 - i) * sizeof(WifiCred));
+    memset(&g.wifis[MAX_WIFI - 1], 0, sizeof(WifiCred));
+    g.wifis_ver++;
+    cmd_save_wifis = true;
+    return true;
+  }
+  return false;
+}
+
+bool wifi_saved_pass(const char *ssid, char *pass, size_t n) {
+  bool found = false;
+  LOCK();
+  for (auto &w : g.wifis)
+    if (w.ssid[0] && !strcmp(w.ssid, ssid)) {
+      strlcpy(pass, w.pass, n);
+      found = true;
+      break;
+    }
+  UNLOCK();
+  return found;
 }

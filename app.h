@@ -145,11 +145,21 @@ struct Weather {
   time_t fetched = 0;
 };
 
+/* A remembered WiFi network. Up to MAX_WIFI are kept, the most recently used first:
+   the board joins whichever of them is in range (the strongest if several are). */
+#define MAX_WIFI 5
+struct WifiCred {
+  char ssid[33];
+  char pass[65];
+};
+
 /* Settings and network results, protected by g_mtx */
 struct Shared {
   // settings (stored in NVS)
   char ssid[33] = "";
   char pass[65] = "";
+  WifiCred wifis[MAX_WIFI] = {};  // remembered networks, most recent first ("wifis" in flash)
+  uint8_t wifis_ver = 0;          // changes whenever the list does (for the Settings line)
   char city[64] = "";
   char place[96] = "";
   float lat = 0, lon = 0;
@@ -303,6 +313,10 @@ extern RuuviHist ruuvi_hist[MAX_RUUVI];
 extern volatile bool cmd_save_lang;  // a new language was chosen: save lang_pending (the UI then restarts)
 extern char lang_pending[LANG_CODE_LEN];
 extern volatile bool cmd_save_ruuvi, cmd_save_vic, cmd_save_scan, cmd_save_bl, cmd_save_web, cmd_save_feat, cmd_save_alarm, cmd_save_splash;
+extern volatile bool cmd_save_wifis;  // the remembered networks changed
+bool wifi_saved_pass(const char *ssid, char *pass, size_t n);  // remembered password for a network (takes the lock)
+void wifi_remember(const char *ssid, const char *pass);       // put first in the list (call with the lock held)
+bool wifi_forget(const char *ssid);                            // (call with the lock held)
 extern volatile bool scan_restart;
 
 /* Features that can be switched off in Settings (services stop too) */
@@ -500,6 +514,8 @@ void net_poll_cb(lv_timer_t *t);
 
 /* ui_settings.cpp */
 extern lv_obj_t *lbl_wifi_status, *dd_ssid, *lbl_loc;
+void wifi_ui_refresh();   // the remembered networks line in Settings
+void wifi_ui_selected();  // fills in the password of a remembered network
 void build_settings_tab();
 void ruuvi_settings_refresh(const RuuviTag *copy, uint32_t now);
 

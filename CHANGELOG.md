@@ -41,6 +41,16 @@ being sorted out there. Focus: stability, Victron, RuuviTags and the web page.
 - **Start page bottom bar: only the RuuviTags**, three columns with the temperature over the
   name. The outside temperature moved up beside the weather symbol;
   with no tags added the bar is hidden.
+- **Scan finds networks again when the saved one is out of range.** While the board kept
+  trying to join a network that wasn't there (reason 201, "network not found", over and
+  over), the radio was never free and Scan found nothing; only a full reset helped. A scan
+  now stops those attempts first, and then the remembered networks are tried again.
+- **WiFi remembers up to 5 networks** (home and the caravan, say). Each network that
+  connects is remembered with its password, most recent first. At start, and a minute after
+  a failed attempt or a lost connection, the board scans and joins the strongest remembered
+  network in range. Picking a remembered network in Settings fills in its password, and
+  **Forget** removes it. The list is kept in flash ("wifis") and in the settings backup; a
+  board with only one saved network starts its list with that one.
 - **A mistyped Victron key now shows as "Wrong key"** instead of nonsense values. The
   advertisement only carries the key's first byte, so a key right at the start but wrong
   further on decrypted to random numbers (an AC charger showing 7324 W at 60 V and 120 A,

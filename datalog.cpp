@@ -169,6 +169,7 @@ bool settings_backup() {
   LOCK();
   doc["ssid"] = g.ssid;
   doc["pass"] = g.pass;
+  doc["wifis"] = to_hex((const uint8_t *)g.wifis, sizeof(g.wifis));  // the remembered networks
   doc["city"] = g.city;
   doc["place"] = g.place;
   doc["lat"] = g.lat;
@@ -214,6 +215,11 @@ bool settings_restore() {
 
   prefs.putString("ssid", (const char *)(doc["ssid"] | ""));
   prefs.putString("pass", (const char *)(doc["pass"] | ""));
+  {
+    static WifiCred wl[MAX_WIFI];
+    if (from_hex(doc["wifis"] | "", (uint8_t *)wl, sizeof(wl))) prefs.putBytes("wifis", wl, sizeof(wl));
+    else prefs.remove("wifis");  // an older backup: start again from its one network
+  }
   prefs.putString("city", (const char *)(doc["city"] | ""));
   prefs.putString("place", (const char *)(doc["place"] | ""));
   prefs.putFloat("lat", doc["lat"] | 0.0f);

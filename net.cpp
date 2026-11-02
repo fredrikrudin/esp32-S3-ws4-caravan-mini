@@ -28,22 +28,76 @@ static int http_get(const String &url, String &body) {
   return code;
 }
 
+/* What a scan heard, with channel and signal, for /log (helps when a network is missing) */
+static void log_scan(int n) {
+  char line[400];
+  int hidden = 0, len = snprintf(line, sizeof(line), "WiFi scan: %d network(s):", n < 0 ? 0 : n);
+  for (int i = 0; i < n && len < (int)sizeof(line) - 40; i++) {
+    if (WiFi.SSID(i).length() == 0) {
+      hidden++;
+      continue;
+    }
+    len += snprintf(line + len, sizeof(line) - len, " %.20s (ch %d, %d dBm)", WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
+  }
+  if (hidden && len < (int)sizeof(line) - 20) snprintf(line + len, sizeof(line) - len, ", %d hidden", hidden);
+  logf("%s", line);
+}
+
+static int scan_now();
+
+/* Picks the strongest remembered network in range and puts it in g.ssid/g.pass.
+   Returns false when none of them is heard. */
+static bool pick_known_network() {
+  WifiCred saved[MAX_WIFI];
+  LOCK();
+  memcpy(saved, g.wifis, sizeof(saved));
+  UNLOCK();
+  if (!saved[0].ssid[0]) return false;
+  int n = scan_now();
+  int best = -1, best_rssi = -1000;
+  for (int i = 0; i < n; i++) {
+    String s = WiFi.SSID(i);
+    for (int k = 0; k < MAX_WIFI; k++)
+      if (saved[k].ssid[0] && s == saved[k].ssid && WiFi.RSSI(i) > best_rssi) {
+        best = k;
+        best_rssi = WiFi.RSSI(i);
+      }
+  }
+  WiFi.scanDelete();
+  if (best < 0) return false;
+  logf("WiFi: joining %s (%d dBm), a remembered network", saved[best].ssid, best_rssi);
+  LOCK();
+  strlcpy(g.ssid, saved[best].ssid, sizeof(g.ssid));
+  strlcpy(g.pass, saved[best].pass, sizeof(g.pass));
+  UNLOCK();
+  return true;
+}
+
+/* When to look for a remembered network (net_task); 0 = not now */
+static uint32_t next_pick = 1;
+
+/* A scan fails ("no networks") while the board keeps trying to join a network that
+   isn't there: after each "network not found" (reason 201) it starts over at once, and
+   the radio is never free to scan. So a scan stops that first, and afterwards the
+   remembered networks are looked for again. */
+static int scan_now() {
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.disconnect();
+    vTaskDelay(pdMS_TO_TICKS(150));
+  }
+  int n = WiFi.scanNetworks();
+  if (n < 0) {  // busy after all: once more
+    vTaskDelay(pdMS_TO_TICKS(500));
+    n = WiFi.scanNetworks();
+  }
+  log_scan(n);
+  return n;
+}
+
 static void do_scan() {
   set_wifi_status(TR("Scanning..."));
-  int n = WiFi.scanNetworks();
-  {  // what was heard, with channel and signal, for /log (helps when a network is missing)
-    char line[400];
-    int hidden = 0, len = snprintf(line, sizeof(line), "WiFi scan: %d network(s):", n < 0 ? 0 : n);
-    for (int i = 0; i < n && len < (int)sizeof(line) - 40; i++) {
-      if (WiFi.SSID(i).length() == 0) {
-        hidden++;
-        continue;
-      }
-      len += snprintf(line + len, sizeof(line) - len, " %.20s (ch %d, %d dBm)", WiFi.SSID(i).c_str(), WiFi.channel(i), WiFi.RSSI(i));
-    }
-    if (hidden && len < (int)sizeof(line) - 20) snprintf(line + len, sizeof(line) - len, ", %d hidden", hidden);
-    logf("%s", line);
-  }
+  int n = scan_now();
+  if (WiFi.status() != WL_CONNECTED) next_pick = (millis() + 3000UL) | 1;  // then join a remembered one, if any is here
 
   char saved[33];
   LOCK();
@@ -262,6 +316,14 @@ static void save_pending() {
     UNLOCK();
     prefs.putBytes("rhist", copy, sizeof(copy));
   }
+  if (cmd_save_wifis) {
+    cmd_save_wifis = false;
+    static WifiCred copy[MAX_WIFI];
+    LOCK();
+    memcpy(copy, g.wifis, sizeof(copy));
+    UNLOCK();
+    prefs.putBytes("wifis", copy, sizeof(copy));
+  }
   if (cmd_save_splash) {
     cmd_save_splash = false;
     SplashCfg copy;
@@ -374,16 +436,31 @@ static void net_task(void *arg) {
 
   bool was_up = false, ntp_started = false;
   uint32_t connect_started = 0, next_weather = 0;
-
-  LOCK();
-  bool have_ssid = g.ssid[0] != 0;
-  UNLOCK();
-  if (have_ssid) cmd_connect = true;  // auto-connect with saved credentials
+  /* When to look for a remembered network: at start, and a minute after a failed
+     attempt or a lost connection (so the board finds the caravan's WiFi after
+     leaving home, say). 0 = not now. */
+  next_pick = millis() | 1;
 
   for (;;) {
     if (cmd_scan) {
       cmd_scan = false;
       do_scan();
+    }
+
+    if (!cmd_connect && next_pick && (int32_t)(millis() - next_pick) >= 0 && !connect_started &&
+        WiFi.status() != WL_CONNECTED && !power_on_battery()) {
+      next_pick = 0;
+      if (pick_known_network()) {
+        cmd_connect = true;
+      } else {
+        LOCK();
+        bool any = g.wifis[0].ssid[0] != 0;
+        UNLOCK();
+        if (any) {
+          set_wifi_status(TR("No remembered network in range"));
+          next_pick = (millis() + 60000UL) | 1;  // look again in a minute
+        }  // none remembered yet: wait for Connect in Settings
+      }
     }
 
     if (cmd_connect) {
@@ -428,6 +505,13 @@ static void net_task(void *arg) {
                        heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                        heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
       connect_started = 0;
+      next_pick = 0;
+      {  // it worked: remember it (first in the list)
+        String now_ssid = WiFi.SSID();
+        LOCK();
+        if (now_ssid == g.ssid) wifi_remember(g.ssid, g.pass);
+        UNLOCK();
+      }
       ble_pause_scan(false);  // connected: Bluetooth scanning can continue
       if (!ntp_started) {
         configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC; local offset comes from Open-Meteo
@@ -437,6 +521,7 @@ static void net_task(void *arg) {
     } else if (!up && was_up) {
       logf("WiFi: connection lost (reason %u), reconnecting", last_disc_reason);
       set_wifi_status(TR("Connection lost - reconnecting..."));
+      next_pick = (millis() + 60000UL) | 1;  // still gone in a minute: look for another one
     }
     was_up = up;
 
@@ -444,6 +529,7 @@ static void net_task(void *arg) {
       set_wifi_status(TR("Could not connect: %s (reason %u)"), TR(disc_reason_text(last_disc_reason)), last_disc_reason);
       connect_started = 0;
       ble_pause_scan(false);  // don't leave Bluetooth paused; WiFi keeps retrying by itself
+      next_pick = (millis() + 60000UL) | 1;  // then try the remembered networks again
     }
 
     if (cmd_geocode) {

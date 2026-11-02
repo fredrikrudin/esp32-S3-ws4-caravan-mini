@@ -70,6 +70,7 @@ static const TrPair tr_sv[] = {
   { "wrong password or handshake timeout", "fel lösenord eller tidsgräns vid inloggning" },
   { "weak signal / timeout", "svag signal / tidsgräns" },
   { "router refused the connection", "routern nekade anslutningen" },
+  { "No remembered network in range", "Inget sparat nätverk inom räckhåll" },
   { "Connecting to %s...", "Ansluter till %s..." },
   { "Connection lost - reconnecting...", "Anslutningen bröts - ansluter igen..." },
   { "Could not connect: %s (reason %u)", "Kunde inte ansluta: %s (orsak %u)" },
@@ -149,6 +150,10 @@ static const TrPair tr_sv[] = {
   { "Calculated, incl. inverter", "Beräknat, med växelriktare" },
   { "Calculated", "Beräknat" },
   { "Scan and choose a network first", "Sök och välj ett nätverk först" },
+  { "Remembered: %s", "Sparade: %s" },
+  { "No networks remembered yet. One is remembered once it connects.", "Inga sparade nätverk än. Ett nätverk sparas när det har anslutit." },
+  { "Forgot %s", "Glömde %s" },
+  { "Choose a remembered network to forget", "Välj ett sparat nätverk att glömma" },
   { "Web server switched off. Nothing is served, and about 12 kB of memory is freed.", "Webbservern är avstängd. Inget visas, och ungefär 12 kB minne frigörs." },
   { "\"%s\" at http://%s.local/ on the same WiFi.\n%s", "\"%s\" på http://%s.local/ i samma WiFi.\n%s" },
   { "Password required.", "Lösenord krävs." },
@@ -204,6 +209,7 @@ static const TrPair tr_sv[] = {
   { "WiFi", "WiFi" },
   { "Scan", "Sök" },
   { "Password", "Lösenord" },
+  { "Forget", "Glöm" },
   { "Web page", "Webbsida" },
   { "Name of the page", "Sidans namn" },
   { "Run the web server", "Kör webbservern" },
@@ -374,6 +380,6 @@ static const TrPair tr_sv[] = {
 };
 
 static const BuiltIn builtin[] = {
-  { "sv", "Svenska", tr_sv, 368 },
+  { "sv", "Svenska", tr_sv, 374 },
 };
 static const int BUILTIN_COUNT = 1;

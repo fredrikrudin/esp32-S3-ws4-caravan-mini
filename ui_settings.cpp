@@ -39,6 +39,43 @@ static void connect_now() {
 static void scan_btn_cb(lv_event_t *e) {
   cmd_scan = true;
 }
+
+/* The remembered networks, under the Connect button */
+static lv_obj_t *lbl_wifis;
+void wifi_ui_refresh() {
+  char list[MAX_WIFI * 36] = "";
+  LOCK();
+  for (auto &w : g.wifis) {
+    if (!w.ssid[0]) continue;
+    if (list[0]) strlcat(list, ", ", sizeof(list));
+    strlcat(list, w.ssid, sizeof(list));
+  }
+  UNLOCK();
+  if (list[0]) lv_label_set_text_fmt(lbl_wifis, "Remembered: %s", list);
+  else lv_label_set_text(lbl_wifis, "No networks remembered yet. One is remembered once it connects.");
+}
+
+/* Picking a remembered network fills in its password */
+void wifi_ui_selected() {
+  char ssid[33], pass[65];
+  lv_dropdown_get_selected_str(dd_ssid, ssid, sizeof(ssid));
+  if (wifi_saved_pass(ssid, pass, sizeof(pass))) (lv_textarea_set_text)(ta_pass, pass);
+}
+
+static void forget_btn_cb(lv_event_t *e) {
+  char ssid[33];
+  lv_dropdown_get_selected_str(dd_ssid, ssid, sizeof(ssid));
+  LOCK();
+  bool gone = wifi_forget(ssid);
+  UNLOCK();
+  if (gone) {
+    lv_label_set_text_fmt(lbl_wifi_status, "Forgot %s", ssid);
+    (lv_textarea_set_text)(ta_pass, "");
+  } else {
+    lv_label_set_text(lbl_wifi_status, "Choose a remembered network to forget");
+  }
+  wifi_ui_refresh();
+}
 static void connect_btn_cb(lv_event_t *e) {
   connect_now();
 }
@@ -670,6 +707,7 @@ void build_settings_tab() {
   lv_obj_set_flex_grow(dd_ssid, 1);
   lv_dropdown_set_options(dd_ssid, g.ssid[0] ? g.ssid : NO_NET_TEXT);
   make_btn(row, LV_SYMBOL_REFRESH " Scan", scan_btn_cb);
+  lv_obj_add_event_cb(dd_ssid, [](lv_event_t *e) { wifi_ui_selected(); }, LV_EVENT_VALUE_CHANGED, NULL);
 
   ta_pass = make_ta(sec, "Password", connect_now);
   lv_textarea_set_password_mode(ta_pass, true);
@@ -678,10 +716,15 @@ void build_settings_tab() {
 
   row = make_row(sec, LV_FLEX_ALIGN_START);
   make_btn(row, LV_SYMBOL_OK " Connect", connect_btn_cb);
+  make_btn(row, LV_SYMBOL_TRASH " Forget", forget_btn_cb);
   lbl_wifi_status = lv_label_create(row);
   lv_obj_set_flex_grow(lbl_wifi_status, 1);
   lv_label_set_long_mode(lbl_wifi_status, LV_LABEL_LONG_WRAP);
   lv_label_set_text(lbl_wifi_status, "");
+  lbl_wifis = make_grey_label(sec);
+  lv_obj_set_width(lbl_wifis, LV_PCT(100));
+  lv_label_set_long_mode(lbl_wifis, LV_LABEL_LONG_WRAP);
+  wifi_ui_refresh();
 
   /* ---- Web page ---- */
   sec = make_section(p_conn, LV_SYMBOL_EYE_OPEN "  Web page");
